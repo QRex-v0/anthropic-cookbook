@@ -43,7 +43,7 @@ for title in wiki_titles:
     page = next(iter(response["query"]["pages"].values()))
     wiki_text = page["extract"]
  
-    data_path = Path("data")
+    data_path = Path(__file__).parent / "data"
     if not data_path.exists():
         Path.mkdir(data_path)
  
@@ -57,7 +57,7 @@ from llama_index.core import SimpleDirectoryReader
 city_docs = {}
 for wiki_title in wiki_titles:
     city_docs[wiki_title] = SimpleDirectoryReader(
-        input_files=[f"data/{wiki_title}.txt"]
+        input_files=[str(Path(__file__).parent / "data" / f"{wiki_title}.txt")]
     ).load_data()
 
 from llama_index.core import SummaryIndex, VectorStoreIndex
@@ -138,7 +138,7 @@ top_agent = ReActAgent(
 )
 
 async def main():
-    response = await top_agent.run("What is the capital of Canada?")
+    response = await top_agent.run("Give me a summary on all the positive aspects of Chicago")
     print(response)
 
 asyncio.run(main())

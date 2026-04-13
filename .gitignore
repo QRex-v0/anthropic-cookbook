@@ -10,4 +10,7 @@ wheels/
 .venv
 
 # Data
-data/
+multi_doc_agents/data/
+
+# Persisted indexes
+multi_doc_agents/storage/
