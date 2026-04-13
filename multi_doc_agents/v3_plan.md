@@ -11,6 +11,10 @@ supports everything the framework provided. We keep LlamaIndex for indexing
 
 ### Cost: ~75% cheaper per query
 
+A "query" = one user question to the top-level router (e.g. "Give me a summary
+on all the positive aspects of Chicago"), which typically triggers 2 router
+LLM calls + 3–5 city sub-agent LLM calls underneath.
+
 | | v2 (all Opus) | v3 (Opus router + Sonnet sub-agents) |
 |---|---|---|
 | Router model | claude-opus-4-1 ($15/$75 per 1M) | claude-opus-4-1 ($15/$75 per 1M) |
