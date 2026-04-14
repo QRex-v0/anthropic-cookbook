@@ -114,6 +114,45 @@ LlamaIndex ReActAgent was state of the art in 2023-2024, when Claude's tool use 
 5. **Built-in token counting** — `response.usage.input_tokens` / `output_tokens` directly from the API, no event scraping.
 6. **Persist vector indexes to disk** — Currently `VectorStoreIndex.from_documents()` re-embeds all chunks on every run. Persist to disk, only rebuild when source data changes.
 
+## Step 4: Automated Evaluation (`eval.py`)
+
+`eval.py` runs all three versions as subprocesses (avoids LlamaIndex Settings conflicts) and uses Claude as an automated judge to score and compare answers.
+
+### How it works
+
+1. Each version accepts a question via `sys.argv[1]` and prints the answer between `===EVAL_ANSWER_START===` / `===EVAL_ANSWER_END===` delimiters
+2. 4 questions × 3 versions = 12 subprocess runs (sequential)
+3. Claude Sonnet judges each question with **shuffled, blind labels** (A/B/C) across 3 rounds to mitigate position bias
+4. Scores averaged across rounds; winner by majority vote
+
+### Results
+
+| Question | v1 | v2 | v3 | Winner |
+|----------|-----|-----|-----|--------|
+| Chicago positive aspects | avg=4.9 | avg=4.5 | avg=4.6 | **v1** |
+| Houston population | avg=5.0 | avg=5.0 | avg=5.0 | **v3** (tiebreak: added context) |
+| Toronto vs Boston transit | avg=4.2 | avg=3.9 | avg=4.9 | **v3** |
+| Strongest economy (5 cities) | avg=1.0 | avg=1.0 | avg=4.9 | **v3** |
+
+**Aggregate: v1=1, v2=0, v3=3 wins**
+
+### Key findings
+
+- **v3 is 2-3× faster** — Sonnet sub-agents respond faster than Opus, and it compounds across 5-15+ LLM round-trips per query
+- **v1 & v2 timed out (300s) on multi-city comparison** — the LlamaIndex ReAct loop couldn't finish routing to all 5 city agents in time. v3 completed in 171s.
+- **v2 answers truncated** — on longer answers, v2's output cut off mid-sentence (likely a framework buffering issue)
+- **v1 won single-city queries** — when the task is simple enough that Opus-everywhere doesn't hit the timeout, its stronger reasoning helps. But this is the minority case.
+- **Model mixing works** — using Sonnet for sub-agent retrieval/summarization (a simple task) doesn't hurt quality vs Opus, while cutting cost ~75%
+
+### Speed comparison
+
+| Question | v1 | v2 | v3 |
+|----------|-----|-----|-----|
+| Chicago summary | 139s | 125s | **43s** |
+| Houston population | 35s | 37s | **15s** |
+| Transit comparison | 184s | 187s | **93s** |
+| Economy comparison | 300s (timeout) | 300s (timeout) | **171s** |
+
 ## Files
 
 | File | Description |
@@ -121,6 +160,7 @@ LlamaIndex ReActAgent was state of the art in 2023-2024, when Claude's tool use 
 | `main.py` | Original fixed script (flat, notebook-style) |
 | `main_v2.py` | Reorganized with modular functions, event logging, token tracking |
 | `main_v3.py` | Raw SDK ReAct loop, model mixing, prompt caching, streaming |
+| `eval.py` | LLM-as-Judge evaluation across all three versions |
 
 ## Usage
 
@@ -133,4 +173,7 @@ export ANTHROPIC_API_KEY=sk-...
 
 # Run
 python multi_doc_agents/main_v3.py
+
+# Run evaluation
+python multi_doc_agents/eval.py
 ```

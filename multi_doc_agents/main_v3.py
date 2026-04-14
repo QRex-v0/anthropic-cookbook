@@ -429,6 +429,8 @@ def run_top_agent(
 
 # --- Main ---
 def main():
+    import sys
+
     print("Setting up models...")
     client, _ = setup_models()
 
@@ -443,11 +445,14 @@ def main():
 
     tracker = TokenTracker()
 
-    run_top_agent(
-        client, tracker, city_tools_map,
-        "Give me a summary on all the positive aspects of Chicago",
+    question = sys.argv[1] if len(sys.argv) > 1 else "Give me a summary on all the positive aspects of Chicago"
+    answer = run_top_agent(
+        client, tracker, city_tools_map, question,
     )
 
+    print("===EVAL_ANSWER_START===")
+    print(answer)
+    print("===EVAL_ANSWER_END===")
     tracker.print_summary()
 
 

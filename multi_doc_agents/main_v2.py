@@ -215,6 +215,8 @@ async def query_with_events(
 
 # --- Main ---
 async def main():
+    import sys
+
     llm, embed_model = setup_settings()
     fetch_wikipedia_data(WIKI_TITLES, DATA_DIR)
     city_docs = load_documents(WIKI_TITLES, DATA_DIR)
@@ -223,9 +225,11 @@ async def main():
     agents = {t: build_city_agent(t, city_docs[t], llm) for t in WIKI_TITLES}
     top_agent = build_top_agent(agents, llm, tracker)
 
-    await query_with_events(
-        top_agent, "Give me a summary on all the positive aspects of Chicago", tracker
-    )
+    question = sys.argv[1] if len(sys.argv) > 1 else "Give me a summary on all the positive aspects of Chicago"
+    answer = await query_with_events(top_agent, question, tracker)
+    print("===EVAL_ANSWER_START===")
+    print(answer)
+    print("===EVAL_ANSWER_END===")
     tracker.print_summary(MODEL)
 
 

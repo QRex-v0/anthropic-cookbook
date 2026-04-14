@@ -17,3 +17,6 @@ multi_doc_agents/data/
 
 # Persisted indexes
 multi_doc_agents/storage/
+
+# Eval results
+multi_doc_agents/eval_results.json

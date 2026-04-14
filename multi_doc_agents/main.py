@@ -3,6 +3,8 @@ Reference: https://platform.claude.com/cookbook/third-party-llamaindex-multi-doc
 
 An updated version of the multi-document agents recipe.
 """
+import sys
+
 import dotenv
 import os
 
@@ -138,7 +140,10 @@ top_agent = ReActAgent(
 )
 
 async def main():
-    response = await top_agent.run("Give me a summary on all the positive aspects of Chicago")
+    question = sys.argv[1] if len(sys.argv) > 1 else "Give me a summary on all the positive aspects of Chicago"
+    response = await top_agent.run(question)
+    print("===EVAL_ANSWER_START===")
     print(response)
+    print("===EVAL_ANSWER_END===")
 
 asyncio.run(main())
