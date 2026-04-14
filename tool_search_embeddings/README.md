@@ -118,5 +118,10 @@ tools = deferred_tools + [TOOL_SEARCH_DEFINITION]
 
 ```bash
 export ANTHROPIC_API_KEY=sk-...
+
+# Original (has defer_loading bug)
 python tool_search_embeddings/main.py
+
+# Fixed version with defer_loading + token tracking
+python tool_search_embeddings/main_v2.py
 ```
