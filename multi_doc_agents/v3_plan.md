@@ -21,21 +21,25 @@ LLM calls + 3–5 city sub-agent LLM calls underneath.
 | City sub-agent model | claude-opus-4-1 ($15/$75 per 1M) | **claude-sonnet-4-5 ($3/$15 per 1M)** |
 | Sub-agent input cost | 5× ~1,200 tok × $15/M = **$0.090** | 5× ~1,200 tok × $3/M = **$0.018** |
 | Sub-agent output cost | 5× ~300 tok × $75/M = **$0.113** | 5× ~300 tok × $15/M = **$0.023** |
-| Prompt caching | Not available | **90% discount on cached input** |
 | **Estimated total** | **~$0.25/query** | **~$0.06/query** |
 
 Sub-agents do the heavy lifting (5+ calls per query), so using Sonnet there
 while keeping Opus for routing gives the best quality/cost tradeoff.
 
-### Prompt caching: further ~40% input savings
+### Prompt caching: not impactful here (but the plumbing is in place)
 
-On multi-step ReAct loops, the system prompt and tool definitions are
-re-sent every turn. With `cache_control: {"type": "ephemeral"}`:
+Anthropic's prompt caching requires a minimum token threshold to activate
+(1024 tokens for Sonnet, 2048 for Opus). Our system prompts and tool
+definitions are ~100-200 tokens — well under the limit, so cache never kicks in.
 
-- Step 1: full-price input (cache write)
-- Steps 2+: **90% discount** on system + tools (cache read)
+We *could* stuff the full source document into the system prompt to exceed the
+threshold, but that defeats the purpose of tool-based retrieval (fetching only
+relevant chunks). We'd pay more total tokens just to show cache savings — a net
+cost increase.
 
-For a typical 3-step city agent, ~2/3 of input tokens hit cache.
+The `cache_control` annotations are left in the code as scaffolding. They become
+valuable in patterns with larger system prompts — e.g., long multi-turn
+conversations, large tool schemas, or RAG with pre-loaded context.
 
 ### Index persistence: seconds vs minutes on repeat runs
 
@@ -111,11 +115,13 @@ for step in range(MAX_STEPS):
     # append assistant content + tool_results, continue
 ```
 
-### Prompt caching
+### Prompt caching (scaffolding only)
 
 - System prompt: `cache_control: {"type": "ephemeral"}` on the text block
 - Tool definitions: `cache_control: {"type": "ephemeral"}` on the **last** tool
-- Effect: on ReAct step 2+, system + tools are read from cache instead of re-tokenized
+- These annotations are present but don't activate in this demo — system prompts
+  and tool definitions are below the minimum token threshold (1024 for Sonnet,
+  2048 for Opus). See "What we gain" section for details.
 
 ### Index persistence
 
@@ -142,9 +148,9 @@ FINAL ANSWER:
 ============================================================
 
 TOKEN USAGE
-  claude-opus-4-1:    2 calls |  2,306 in |   923 out | cache: 1,200 read
-  claude-sonnet-4-5:  5 calls |  5,836 in | 1,595 out | cache: 3,400 read
-  Total: $0.0821 (saved $X.XX from caching)
+  claude-opus-4-1:    2 calls |  2,306 in |   923 out
+  claude-sonnet-4-5:  5 calls |  5,836 in | 1,595 out
+  Total: $0.0582
 ```
 
 ## Verification
@@ -153,5 +159,5 @@ TOKEN USAGE
 2. First run: prints "Building indexes for {city}..." for each city
 3. Second run: prints "Loading cached indexes for {city}..." (fast, no re-embedding)
 4. Output shows ReAct loop clearly with streaming text
-5. Token summary shows per-model breakdown with cache hits on step 2+
+5. Token summary shows per-model breakdown
 6. Compare final answer quality with v2 output

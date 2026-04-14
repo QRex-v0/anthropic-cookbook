@@ -96,6 +96,7 @@ class TokenTracker:
                 f"{s['calls']:>3} calls",
                 f"{s['input']:>7,} in",
                 f"{s['output']:>7,} out",
+                f"{cost:.4f} cost",
             ]
             if s["cache_read"]:
                 parts.append(f"cache: {s['cache_read']:,} read")
@@ -125,6 +126,7 @@ def setup_models():
 # --- Data fetching ---
 def fetch_wikipedia_data(titles: list[str], data_dir: Path) -> None:
     """Download Wikipedia articles to local text files."""
+    """Unchanged from v2.py"""
     if not data_dir.exists():
         data_dir.mkdir(parents=True)
 
@@ -153,6 +155,7 @@ def fetch_wikipedia_data(titles: list[str], data_dir: Path) -> None:
 # --- Document loading ---
 def load_documents(titles: list[str], data_dir: Path) -> dict[str, list]:
     """Load text files into LlamaIndex Document objects."""
+    """Unchanged from v2.py"""
     city_docs = {}
     for title in titles:
         city_docs[title] = SimpleDirectoryReader(
@@ -170,6 +173,7 @@ def build_or_load_indexes(
     titles: list[str], city_docs: dict[str, list], data_dir: Path
 ) -> dict[str, dict[str, QueryEngineTool]]:
     """Build or load persisted vector + summary indexes per city."""
+    """For demo purposes, we just use JSON files; for advanced use, we would use a database."""
     city_tools = {}
 
     for title in titles:
@@ -426,7 +430,7 @@ def run_top_agent(
 # --- Main ---
 def main():
     print("Setting up models...")
-    client, embed_model = setup_models()
+    client, _ = setup_models()
 
     print("Fetching Wikipedia data...")
     fetch_wikipedia_data(WIKI_TITLES, DATA_DIR)
