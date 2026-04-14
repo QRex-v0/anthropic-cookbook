@@ -165,6 +165,10 @@ def run_tool_search_conversation(user_message: str, max_turns: int = 5) -> None:
         response = claude_client.messages.create(
             model=MODEL,
             max_tokens=1024,
+            # BUG: should use defer_loading=True on TOOL_LIBRARY tools
+            # Without it, all tools are in context from the start, defeating tool search.
+            # See compare_defer_loading() results: 1,464 vs 654 input tokens with 8 tools.
+            # Fixed in main_v2.py.
             tools=TOOL_LIBRARY + [TOOL_SEARCH_DEFINITION],
             messages=messages,
             # IMPORTANT: This beta header enables tool definitions in tool results
@@ -245,3 +249,7 @@ def run_tool_search_conversation(user_message: str, max_turns: int = 5) -> None:
  
 print("✓ Conversation loop implemented")
 
+
+run_tool_search_conversation(
+    "If I invest $10,000 at 5% annual interest for 10 years with monthly compounding, how much will I have?"
+)

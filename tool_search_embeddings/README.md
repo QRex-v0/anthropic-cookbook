@@ -110,7 +110,8 @@ tools = deferred_tools + [TOOL_SEARCH_DEFINITION]
 
 | File | Description |
 |------|-------------|
-| `main.py` | Main script — embedding setup, tool-to-text conversion, search + Claude integration |
+| `main.py` | Original cookbook implementation (has `defer_loading` bug — all tools loaded into context) |
+| `main_v2.py` | Fixed version with `defer_loading` and other improvements |
 | `tool_lib.py` | Tool library — 8 tools across weather and finance domains |
 
 ## Usage
