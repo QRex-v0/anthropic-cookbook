@@ -20,3 +20,6 @@ multi_doc_agents/storage/
 
 # Eval results
 multi_doc_agents/eval_results.json
+
+# Vendored utils (download from upstream)
+context_compaction/utils/

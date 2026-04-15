@@ -12,6 +12,7 @@ load_dotenv()
 MODEL = "claude-sonnet-4-6"
 
 import anthropic
+# Download utils/ from: https://github.com/anthropics/claude-cookbooks/tree/main/tool_use/utils
 from utils.customer_service_tools import (
     classify_ticket,
     draft_response,
