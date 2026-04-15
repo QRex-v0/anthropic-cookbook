@@ -153,58 +153,63 @@ LlamaIndex ReActAgent was state of the art in 2023-2024, when Claude's tool use 
 | Transit comparison | 184s | 187s | **93s** |
 | Economy comparison | 300s (timeout) | 300s (timeout) | **171s** |
 
-## Design critique: why per-city agents don't scale
+## Design critique
 
-The cookbook's architecture (one agent per city, routing layer on top) is a poor design for anything beyond a demo:
+### Where tokens actually burn
 
-- **Linear cost scaling** — adding a document means adding an agent. At 50 documents, you have 50 sub-agents with 50 system prompts.
-- **Sequential fanout** — a multi-city comparison query triggers 5+ sub-agents one by one, each running its own ReAct loop. v1/v2 timed out (300s) on a 5-city question.
-- **Prompt caching doesn't help** — each sub-agent call is a short, independent conversation. There's not enough repeated prefix for caching to matter.
-- **The main v3 win was model mixing** — Sonnet for sub-agents instead of Opus everywhere (~75% cost reduction, 2-3x faster). Not architectural cleverness.
+The tool schemas are NOT the main cost (~350 tokens for 5 city tools). The real costs:
 
-## Step 5 (future): v4 — single agent, merged index, model pipeline
+1. **Message history accumulation** — every ReAct step appends the full assistant response + tool results to messages, and the ENTIRE history is re-sent on the next API call. Each step pays for all previous steps again.
 
-The right architecture for a production multi-document system:
+2. **Nested ReAct loops** — when the top-level calls a city tool, that city agent runs its OWN ReAct loop (up to 10 steps). The city agent's final result (500-1000 tokens of document chunks) gets passed back to the top-level and added to ITS growing messages.
+
+3. **Hidden LLM calls inside LlamaIndex** — even in v3 where we dropped `ReActAgent`, we still use LlamaIndex's `QueryEngineTool`. When you call `query_engine.query("Chicago transit")`, LlamaIndex internally: (a) retrieves chunks via embedding similarity (cheap), then (b) calls the LLM to synthesize an answer from those chunks (expensive, hidden). There's a hidden LLM call inside every tool call. We should have used `index.as_retriever().retrieve()` (retrieval only, no LLM) and let the agent reason over the raw chunks directly.
+
+4. **Prompt caching savings were negligible** — system prompts are tiny (~60 tokens). Caching them saves almost nothing. The main v3 win was model mixing (Sonnet for sub-agents), not caching.
+
+### Why per-city agents don't scale
+
+The cookbook's architecture (one agent per city, routing layer on top) has two independent problems:
+
+1. **Unnecessary** — one index with all cities, one retriever, one agent. No routing needed. The embedding search naturally returns relevant chunks regardless of which city they're from.
+
+2. **Doesn't scale** — adding a document means adding an agent. At 50 documents, you have 50 sub-agents, 50 tools in the router, each with its own ReAct loop. Sequential fanout on multi-city queries caused v1/v2 to time out (300s) on a 5-city comparison.
+
+## Step 5 (future): v4 — single agent, merged index
+
+### Architecture
 
 ```
 User query
     |
-Master agent (Sonnet) — decides WHAT to search, formulates queries
+Single agent (Sonnet) — formulates search queries, reasons over results
     |
-Tool: search(query, filters?) — embedding cosine similarity against ONE index
+Tool: search(query, filters?) — embedding similarity against ONE merged index
     |
 Returns top-k chunks (from any/all cities)
     |
-Cheap model (Haiku) — reads chunks, filters noise, summarizes
-    |
-Clean summary back to master agent
-    |
-Master reasons over summary, maybe searches again, then answers
+Agent reads chunks directly and answers
 ```
 
-### Why this is better
+No routing layer, no sub-agents, no hidden LLM calls inside retrieval. Use `index.as_retriever().retrieve()` instead of `query_engine.query()` to avoid LlamaIndex's hidden synthesis LLM call.
 
-| | Per-city agents (v1-v3) | Single agent + search (v4) |
-|---|---|---|
-| Adding documents | Add a new agent | Add chunks to the index |
-| Multi-doc queries | Sequential sub-agent calls | One search returns chunks from all docs |
-| Token cost | All models see raw chunks | Only Haiku sees raw chunks |
-| Complexity | Routing layer + N agents | One agent + search tool + Haiku filter |
+### When to add a Haiku filter layer
 
-### Key techniques
+For this 5-city Wikipedia demo, returning raw chunks directly to the agent is simplest and cheapest. A Haiku filtering layer only makes sense when:
+- You retrieve many chunks (20+) and most are noise
+- Chunks are large and verbose
+- The raw data volume would overwhelm the agent's context
 
-**Query formulation** — the master model needs to write good search queries, not just forward the user's question. Solutions:
+If needed, Haiku reads chunks cheaply and returns a summary + confidence + key evidence. But this is an optimization for scale — for small document sets, just let the agent read the chunks.
+
+### Query formulation
+
+The agent needs to write good search queries, not just forward the user's question. "Compare transit systems" should become two searches: "Chicago public transportation" and "Boston MBTA subway." Solutions:
 - Query expansion: generate 2-3 search queries per intent, run all, deduplicate
-- HyDE (Hypothetical Document Embeddings): ask a cheap model to write a hypothetical answer, embed *that* instead of the question
-- Metadata filters: chunks tagged with city/category, master specifies `search(query="transit", city="Chicago")`
+- HyDE: ask a cheap model to write a hypothetical answer, embed *that* instead of the question
+- Metadata filters: chunks tagged with city/category, agent specifies `search(query="transit", city="Chicago")`
 
-**Haiku as a filter** — raw chunks are noisy. Haiku reads them cheaply and returns:
-- A summary of relevant content
-- Confidence rating (high/medium/low) per chunk
-- 2-3 key verbatim sentences as evidence
-- Chunk count: "found 25, 3 relevant" so the master knows whether to search again
-
-**Scaling the index:**
+### Scaling the index
 
 | Scale | Solution |
 |---|---|
@@ -212,7 +217,7 @@ Master reasons over summary, maybe searches again, then answers
 | 100k - 10M | Vector database (Pinecone, pgvector) with ANN indexing |
 | 10M+ | Hybrid: BM25 keyword + vector similarity, re-rank combined results |
 
-The pattern: **cheap and broad first, expensive and focused last.** Embeddings filter millions to thousands, metadata/BM25 narrows to hundreds, Haiku filters to tens, master reasons over a few clean summaries.
+The pattern: **cheap and broad first, expensive and focused last.**
 
 ## Files
 
