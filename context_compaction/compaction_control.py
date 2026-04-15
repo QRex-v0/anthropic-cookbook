@@ -112,15 +112,35 @@ turn_count_compact = 0
 compaction_count = 0
 prev_msg_count = 0
  
+COMPACT_CONTROL = {
+    "enabled": True,
+    "context_token_threshold": 5000,
+    "model": "claude-haiku-4-5",  # Use Haiku for cost-effective summaries
+    "summary_prompt": """You are processing customer support tickets from a queue.
+ 
+Create a focused summary that preserves:
+ 
+1. **COMPLETED TICKETS**: For each ticket you've fully processed:
+   - Ticket ID and customer name
+   - Issue category and priority assigned
+   - Team routed to
+   - Brief outcome
+ 
+2. **PROGRESS STATUS**: 
+   - How many tickets you've completed
+   - Approximately how many remain in the queue
+ 
+3. **NEXT STEPS**: Continue processing the next ticket
+ 
+Format with clear sections and wrap in <summary></summary> tags.""",
+}
+
 runner = client.beta.messages.tool_runner(
     model=MODEL,
     max_tokens=4096,
     tools=tools,
     messages=messages,
-    compaction_control={
-        "enabled": True,
-        "context_token_threshold": 5000,
-    },
+    compaction_control=COMPACT_CONTROL,
 )
  
 for message in runner:
