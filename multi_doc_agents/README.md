@@ -153,6 +153,67 @@ LlamaIndex ReActAgent was state of the art in 2023-2024, when Claude's tool use 
 | Transit comparison | 184s | 187s | **93s** |
 | Economy comparison | 300s (timeout) | 300s (timeout) | **171s** |
 
+## Design critique: why per-city agents don't scale
+
+The cookbook's architecture (one agent per city, routing layer on top) is a poor design for anything beyond a demo:
+
+- **Linear cost scaling** — adding a document means adding an agent. At 50 documents, you have 50 sub-agents with 50 system prompts.
+- **Sequential fanout** — a multi-city comparison query triggers 5+ sub-agents one by one, each running its own ReAct loop. v1/v2 timed out (300s) on a 5-city question.
+- **Prompt caching doesn't help** — each sub-agent call is a short, independent conversation. There's not enough repeated prefix for caching to matter.
+- **The main v3 win was model mixing** — Sonnet for sub-agents instead of Opus everywhere (~75% cost reduction, 2-3x faster). Not architectural cleverness.
+
+## Step 5 (future): v4 — single agent, merged index, model pipeline
+
+The right architecture for a production multi-document system:
+
+```
+User query
+    |
+Master agent (Sonnet) — decides WHAT to search, formulates queries
+    |
+Tool: search(query, filters?) — embedding cosine similarity against ONE index
+    |
+Returns top-k chunks (from any/all cities)
+    |
+Cheap model (Haiku) — reads chunks, filters noise, summarizes
+    |
+Clean summary back to master agent
+    |
+Master reasons over summary, maybe searches again, then answers
+```
+
+### Why this is better
+
+| | Per-city agents (v1-v3) | Single agent + search (v4) |
+|---|---|---|
+| Adding documents | Add a new agent | Add chunks to the index |
+| Multi-doc queries | Sequential sub-agent calls | One search returns chunks from all docs |
+| Token cost | All models see raw chunks | Only Haiku sees raw chunks |
+| Complexity | Routing layer + N agents | One agent + search tool + Haiku filter |
+
+### Key techniques
+
+**Query formulation** — the master model needs to write good search queries, not just forward the user's question. Solutions:
+- Query expansion: generate 2-3 search queries per intent, run all, deduplicate
+- HyDE (Hypothetical Document Embeddings): ask a cheap model to write a hypothetical answer, embed *that* instead of the question
+- Metadata filters: chunks tagged with city/category, master specifies `search(query="transit", city="Chicago")`
+
+**Haiku as a filter** — raw chunks are noisy. Haiku reads them cheaply and returns:
+- A summary of relevant content
+- Confidence rating (high/medium/low) per chunk
+- 2-3 key verbatim sentences as evidence
+- Chunk count: "found 25, 3 relevant" so the master knows whether to search again
+
+**Scaling the index:**
+
+| Scale | Solution |
+|---|---|
+| < 100k chunks | In-memory numpy (like tool_search_embeddings) |
+| 100k - 10M | Vector database (Pinecone, pgvector) with ANN indexing |
+| 10M+ | Hybrid: BM25 keyword + vector similarity, re-rank combined results |
+
+The pattern: **cheap and broad first, expensive and focused last.** Embeddings filter millions to thousands, metadata/BM25 narrows to hundreds, Haiku filters to tens, master reasons over a few clean summaries.
+
 ## Files
 
 | File | Description |
